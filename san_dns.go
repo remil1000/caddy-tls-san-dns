@@ -24,11 +24,12 @@ func (ra loggableRE2Array) MarshalLogArray(enc zapcore.ArrayEncoder) error {
 }
 
 type Verifier struct {
-	Names []string `json:"names,omitempty"`
-	logger    *zap.Logger
-	exacts    []string
-	wildcards []string
-	regexps   loggableRE2Array
+	Names                 []string `json:"names,omitempty"`
+	OrganizationalUnits   []string `json:"organizational_units,omitempty"`
+	logger                *zap.Logger
+	exacts                []string
+	wildcards             []string
+	regexps               loggableRE2Array
 }
 
 func (Verifier) CaddyModule() caddy.ModuleInfo {
@@ -51,7 +52,7 @@ func (v *Verifier) Provision(ctx caddy.Context) error {
 			v.exacts = append(v.exacts, name)
 		}
 	}
-	v.logger.Debug("provisioned", zap.Strings("exacts", v.exacts), zap.Strings("wildcards", v.wildcards), zap.Array("regexps", loggableRE2Array(v.regexps)))
+	v.logger.Debug("provisioned", zap.Strings("exacts", v.exacts), zap.Strings("wildcards", v.wildcards), zap.Array("regexps", loggableRE2Array(v.regexps)), zap.Strings("organizational_units", v.OrganizationalUnits))
 	return nil
 }
 
@@ -70,6 +71,20 @@ func (v Verifier) VerifyClientCertificate(rawCerts [][]byte, _ [][]*x509.Certifi
 		found = cert
 	}
 	if found == nil { return fmt.Errorf("SAN DNS: no client certificates found") }
+
+	if (len(v.OrganizationalUnits) > 0) {
+		ou_matches := 0
+		for _, ou := range v.OrganizationalUnits {
+			if (len(found.Subject.OrganizationalUnit) > 0) && found.Subject.OrganizationalUnit[0] == ou {
+				v.logger.Debug("OrganizationalUnit match", zap.String("OU", ou))
+				ou_matches += 1
+				break
+			}
+		}
+		if ou_matches == 0 {
+			return fmt.Errorf("SAN DNS: OrganizationalUnit constraint but no match with: %v", found.Subject.OrganizationalUnit)
+		}
+	}
 
 	for _, name := range found.DNSNames {
 		for _, exact := range v.exacts { if name == exact {
@@ -96,6 +111,12 @@ func parseConfigEntryFromCaddyfile(d *caddyfile.Dispenser, key string, v *Verifi
 			return d.ArgErr(), true
 		}
 		v.Names = d.RemainingArgs()
+
+	case "organizational_units":
+		if !d.NextArg() {
+			return d.ArgErr(), true
+		}
+		v.OrganizationalUnits = d.RemainingArgs()
 
 	default:
 		return d.Errf("unknown subdirective for the san_dns verifier: %s", key), true

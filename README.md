@@ -51,6 +51,24 @@ tls {
 }
 ```
 
+Also supports Organizational Unit filter (*OU* in *DN*), an example allowing
+any SAN in the `IT` *OU*, please note the *OU* filter is a logical and with the
+names matching, so client will only be authorized if matching *OU* **and**
+*SAN* criteria
+
+```
+tls {
+    client_auth {
+        mode require_and_verify
+        verifier san_dns {
+            names [ "*" ]
+            organizational_units [ "IT" ]
+        }
+    }
+}
+```
+
+
 It should work the same without L4, as connection policies are a part of the caddy itself, not L4 module.
 
 Disclaimer: the code was simple enough to hack together, and it works for me so far, but in no way I'm an expert in go.

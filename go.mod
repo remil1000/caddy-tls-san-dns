@@ -1,4 +1,4 @@
-module github.com/exante/caddy-tls-san-dns
+module github.com/remil1000/caddy-tls-san-dns
 
 go 1.22.4
 

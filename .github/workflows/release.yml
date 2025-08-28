@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+    branches:
+      - 'forked'
+
+env:
+  # https://github.com/actions/setup-go/issues/491
+  GOTOOLCHAIN: local
+  XCADDY_VERSION: "v0.4.5"
+  CADDY_VERSION: "v2.10.0"
+
+jobs:
+  release:
+    name: Release
+    strategy:
+      matrix:
+        os: 
+          - linux
+          - openbsd
+        arch:
+          - amd64
+        go: 
+          - '1.24'
+        include:
+        # Set the minimum Go patch version for the given Go minor
+        # Usable via ${{ matrix.GO_SEMVER }}
+        - go: '1.24'
+          GO_SEMVER: '~1.24.0'
+
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.GO_SEMVER }}
+        check-latest: true
+
+    - name: Install xcaddy
+      run: |
+        go install github.com/caddyserver/xcaddy/cmd/xcaddy@${{ env.XCADDY_VERSION }}
+        xcaddy version
+
+    - name: build caddy
+      run: |
+        xcaddy build ${{ env.CADDY_VERSION }} --output /tmp/caddy_${{ env.CADDY_VERSION }}_${{ env.GOOS }}_${{ env.GOARCH }} --with github.com/remil1000/caddy-tls-san-dns@${{ github.ref_name }}
+      env:
+        GOOS: "${{ matrix.os }}"
+        GOARCH: "${{ matrix.arch }}"
+
+    - name: release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          /tmp/caddy_*
+        fail_on_unmatched_files: true
+      if: startsWith(github.ref, 'refs/tags/')
